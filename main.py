@@ -1,11 +1,9 @@
-# 모델 최종본
 import os
 import pandas as pd
 import numpy as np
 from transformers import BertTokenizer, BertForSequenceClassification
 from torch.utils.data import DataLoader, TensorDataset
 import torch
-from sklearn.model_selection import train_test_split
 
 
 class CustomBertForSequenceClassification(BertForSequenceClassification):
@@ -35,7 +33,7 @@ class CustomBertForSequenceClassification(BertForSequenceClassification):
 
 
 # 데이터 로드 및 전처리
-data_A = pd.read_csv("random_500.csv")  # data set A 파일명에 맞게 수정
+data_A = pd.read_csv("output1.csv")  # data set A 파일명에 맞게 수정
 data_B = pd.read_csv("infected.csv")  # data set B 파일명에 맞게 수정
 # 모델 저장 경로
 model_path = "Pre-trained.pt"
@@ -57,10 +55,6 @@ for index, row in data_A_unique.iterrows():
         Y_train.append(1)
     else:
         Y_train.append(0)
-
-# 라벨확인
-print("X_train\n", X_train[:10])
-print("Y_train\n", Y_train[:10])
 
 # BERT 토크나이저 및 모델 로드
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
@@ -98,12 +92,14 @@ input_ids = torch.cat(input_ids, dim=0)
 attention_masks = torch.cat(attention_masks, dim=0)
 labels = torch.tensor(Y_train)
 
-# 데이터셋 및 데이터로더 생성
+# 데이터셋 생성
 dataset = TensorDataset(input_ids, attention_masks, labels)
-train_size = 0.8
-train_dataset, val_dataset = train_test_split(dataset, test_size=1 - train_size, random_state=42)
+
+# 전체 데이터셋을 훈련 데이터셋으로 사용
+train_dataset = dataset
+
+# 데이터로더 생성
 train_dataloader = DataLoader(train_dataset, batch_size=16, shuffle=True)
-val_dataloader = DataLoader(val_dataset, batch_size=16, shuffle=True)
 
 # GPU 사용 가능 여부 확인
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -114,7 +110,7 @@ model.to(device)
 
 # 옵티마이저 및 학습률 설정
 # 기본 학습률 : 2e-6
-optimizer = torch.optim.AdamW(model.parameters(), lr=0)
+optimizer = torch.optim.AdamW(model.parameters(), lr=2e-6)
 
 # 에폭 설정
 epochs = 3
@@ -151,20 +147,3 @@ for epoch in range(epochs):
 
 # 모델 저장
 torch.save(model.state_dict(), model_path)
-
-# 모델 평가
-model.eval()
-val_accuracy = 0
-for batch in val_dataloader:
-    batch = tuple(t.to(device) for t in batch)
-    inputs = {'input_ids': batch[0],
-              'attention_mask': batch[1],
-              'labels': batch[2]}
-    with torch.no_grad():
-        outputs = model(**inputs)
-    logits = outputs[0]  # logits가 outputs의 첫 번째 값입니다.
-    logits = logits.detach().cpu().numpy()
-    label_ids = inputs['labels'].cpu().numpy()
-    val_accuracy += (logits.argmax(axis=1) == label_ids).mean().item()
-
-print(f'Validation Accuracy: {val_accuracy / len(val_dataloader)}')
